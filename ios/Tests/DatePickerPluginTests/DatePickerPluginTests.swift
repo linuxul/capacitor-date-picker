@@ -1,15 +1,14 @@
 import XCTest
-@testable import Plugin
+@testable import DatePickerPlugin
 
 class DatePickerTests: XCTestCase {
 
-    func testEcho() {
-        // This is an example of a functional test case for a plugin.
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+    func testDateRoundTrip() {
+        let format = "yyyy-MM-dd'T'HH:mm:ss"
+        let value = "2021-02-12T10:30:00"
 
-        let implementation = DatePicker()
-        let value = "Hello, World!"
-        let result = implementation.echo(value)
+        let date = Parse.dateFromString(date: value, format: format)
+        let result = Parse.dateToString(date: date, format: format)
 
         XCTAssertEqual(value, result)
     }

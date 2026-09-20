@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Capacitor
 
 /**
@@ -10,7 +11,7 @@ public class DatePickerPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "DatePickerPlugin"
     public let jsName = "DatePicker"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "present", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "present", returnType: .promise)
     ]
     private var options: DatePickerOptions!
     private var instance: DatePicker!
