@@ -3,9 +3,12 @@ package com.getcapacitor.community.datepicker
 import com.getcapacitor.JSObject
 import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
+import com.getcapacitor.PluginException
 import com.getcapacitor.PluginMethod
+import com.getcapacitor.PluginThread
 import com.getcapacitor.annotation.CapacitorPlugin
 import java.text.ParseException
+import kotlin.coroutines.suspendCoroutine
 
 @CapacitorPlugin(name = "DatePicker")
 public class DatePickerPlugin : Plugin() {
@@ -15,24 +18,29 @@ public class DatePickerPlugin : Plugin() {
         options = getDatePickerConfig()
     }
 
-    @PluginMethod
+    // The dialogs are shown from the main thread, and the method returns once the user has answered: { value } with
+    // the picked date, or without a value when they cancel or close the dialog.
+    @PluginMethod(thread = PluginThread.MAIN)
     @Throws(ParseException::class)
-    public fun present(call: PluginCall) {
+    public suspend fun present(call: PluginCall): JSObject {
         val datePicker = DatePicker(getDatePickerConfigCall(call), context)
 
-        datePicker.open(
-            object : DatePickerResolve {
-                override fun resolve(date: String?) {
-                    val response = JSObject()
-                    response.put("value", date)
-                    call.resolve(response)
-                }
+        val answer =
+            suspendCoroutine { continuation ->
+                val once = ResumeOnce(continuation)
+                datePicker.open(
+                    object : DatePickerResolve {
+                        override fun resolve(date: String?) {
+                            once.resume(Result.success(date))
+                        }
 
-                override fun reject(message: String?) {
-                    call.reject(message)
-                }
+                        override fun reject(message: String?) {
+                            once.resume(Result.failure(PluginException(message.orEmpty())))
+                        }
+                    }
+                )
             }
-        )
+        return JSObject().put("value", answer.getOrThrow())
     }
 
     private fun getDatePickerConfig(): DatePickerOptions = DatePickerOptions(

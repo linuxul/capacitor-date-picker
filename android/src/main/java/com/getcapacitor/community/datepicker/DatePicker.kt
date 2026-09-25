@@ -26,10 +26,13 @@ public class DatePicker(private val options: DatePickerOptions, private val cont
     }
 
     public fun launchTime(callback: DatePickerResolve) {
+        // Set once the dialog has answered, so that the dismissal that follows does not answer again
+        var answered = false
         val timePicker = TimePickerDialog(
             context,
             theme,
             { _, hourOfDay, minute ->
+                answered = true
                 calendar.set(
                     calendar.get(Calendar.YEAR),
                     calendar.get(Calendar.MONTH),
@@ -55,8 +58,16 @@ public class DatePicker(private val options: DatePickerOptions, private val cont
         options.cancelText?.let { cancelButton.text = it }
 
         cancelButton.setOnClickListener {
+            answered = true
             callback.resolve(null)
             timePicker.dismiss()
+        }
+        // Closed without an answer (the back button, a touch outside, or by code): answers as the cancel button does
+        timePicker.setOnDismissListener {
+            if (!answered) {
+                answered = true
+                callback.resolve(null)
+            }
         }
 
         timePicker.updateTime(calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE))
@@ -67,10 +78,13 @@ public class DatePicker(private val options: DatePickerOptions, private val cont
     public fun launchDate(callback: DatePickerResolve) {
         options.date?.let { calendar.time = it }
 
+        // Set once the dialog has answered or handed over to the time dialog, so that its dismissal does not answer
+        var answered = false
         val datePicker = DatePickerDialog(
             context,
             theme,
             { _, year, month, dayOfMonth ->
+                answered = true
                 calendar.set(year, month, dayOfMonth)
                 if (options.mode == "dateAndTime") {
                     options.date = calendar.time
@@ -96,13 +110,25 @@ public class DatePicker(private val options: DatePickerOptions, private val cont
         options.cancelText?.let { cancelButton.text = it }
 
         cancelButton.setOnClickListener {
+            answered = true
             callback.resolve(null)
             datePicker.cancel()
+        }
+        // Closed without an answer (the back button, a touch outside, or by code): answers as the cancel button does
+        datePicker.setOnDismissListener {
+            if (!answered) {
+                answered = true
+                callback.resolve(null)
+            }
         }
 
         datePicker.show()
     }
 
+    /**
+     * Shows the picker. [callback] answers once: with the picked date, or with null when the user cancels or the
+     * dialog closes without an answer. Call on the main thread.
+     */
     @Throws(ParseException::class)
     public fun open(callback: DatePickerResolve) {
         if (options.mode == "time") {
