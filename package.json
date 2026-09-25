@@ -1,6 +1,6 @@
 {
   "name": "@capacitor-community/date-picker",
-  "version": "7.1.0",
+  "version": "8.0.0",
   "description": "Native DateTime Picker Plugin for Capacitor Apps",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
@@ -70,7 +70,7 @@
     "typescript": "^5.8.2"
   },
   "peerDependencies": {
-    "@capacitor/core": ">=8.0.0"
+    "@capacitor/core": ">=9.0.0"
   },
   "prettier": "@ionic/prettier-config",
   "swiftlint": "@ionic/swiftlint-config",
