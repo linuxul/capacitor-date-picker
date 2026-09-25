@@ -11,27 +11,32 @@ public class DatePickerPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "DatePickerPlugin"
     public let jsName = "DatePicker"
     public let pluginMethods: [CAPPluginMethod] = [
-        CAPPluginMethod(name: "present", returnType: .promise)
+        .async("present", DatePickerPlugin.present)
     ]
+    static let alreadyPresentedMessage = "A date picker is already presented"
     private var options: DatePickerOptions!
     private var instance: DatePicker!
-    private var call: CAPPluginCall!
+    /// Answers the present call that shows `instance`. Released unanswered, it answers as the cancel button does.
+    private var answer: OnceContinuation<JSObject>?
 
     override public func load() {
         options = datePickerOptions()
     }
 
-    @objc func present(_ call: CAPPluginCall) {
+    /// The picker is UIKit: the method runs on the main actor and returns `{ value }` with the picked date once the user
+    /// taps done, or `{}` once they cancel.
+    @MainActor
+    func present(_ call: CAPPluginCall) async throws -> JSObject {
+        // The call that found a picker on screen used to stay pending.
         if self.instance != nil {
-            return
+            throw CAPPluginError(Self.alreadyPresentedMessage)
         }
-        self.call = call
-        let options = self.datePickerOptions(from: self.call, original: self.options.copy() as! DatePickerOptions)
+        let options = self.datePickerOptions(from: call, original: self.options.copy() as! DatePickerOptions)
         guard let viewController = self.bridge?.viewController else {
-            call.reject("Unable to access viewController!")
-            return
+            throw CAPPluginError("Unable to access viewController!")
         }
-        DispatchQueue.main.async {
+        return await withCheckedContinuation { (continuation: CheckedContinuation<JSObject, Never>) in
+            self.answer = OnceContinuation(continuation, fallback: [:])
             self.instance = DatePicker(options: options, view: viewController.view)
 
             self.instance.done.addTarget(
@@ -53,31 +58,41 @@ public class DatePickerPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func done(sender: UIButton) {
-        if self.instance.options.mode == "dateAndTime" &&
-            self.instance.picker.datePickerMode == UIDatePicker.Mode.date {
-            self.instance.setTimeMode()
+        // A second tap while the picker fades out finds no picker.
+        guard let instance = self.instance else {
             return
         }
-        var obj: [String: Any] = [:]
-        obj["value"] = Parse.dateToString(date: self.instance.picker.date, format: self.instance.options.format)
-        self.call.resolve(obj)
-        self.dismissInstance()
+        if instance.options.mode == "dateAndTime" &&
+            instance.picker.datePickerMode == UIDatePicker.Mode.date {
+            instance.setTimeMode()
+            return
+        }
+        finish(["value": Parse.dateToString(date: instance.picker.date, format: instance.options.format)])
     }
     @objc func cancel(sender: UIButton) {
-        if self.instance.options.mode == "dateAndTime" {
-            if self.instance.options.style != "inline" &&
-                !self.instance.options.mergedDateAndTime &&
-                self.instance.picker.datePickerMode == UIDatePicker.Mode.time {
+        guard let instance = self.instance else {
+            return
+        }
+        if instance.options.mode == "dateAndTime" {
+            if instance.options.style != "inline" &&
+                !instance.options.mergedDateAndTime &&
+                instance.picker.datePickerMode == UIDatePicker.Mode.time {
                 DispatchQueue.main.async {
-                    self.instance.picker.datePickerMode = UIDatePicker.Mode.date
+                    instance.picker.datePickerMode = UIDatePicker.Mode.date
                 }
                 return
             }
         }
-        var obj: [String: Any] = [:]
-        obj["value"] = nil
-        self.call.resolve(obj)
+        // No value: JavaScript receives { value: undefined }, as before.
+        finish([:])
+    }
+
+    /// Closes the picker and answers the present call with `result`.
+    private func finish(_ result: JSObject) {
+        let answer = self.answer
+        self.answer = nil
         self.dismissInstance()
+        answer?.resume(returning: result)
     }
 
     private func dismissInstance() {
